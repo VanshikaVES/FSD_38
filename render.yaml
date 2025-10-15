@@ -22,9 +22,14 @@ services:
     plan: free
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
+    headers:
+      - source: "/(.*)"
+        headers:
+          - key: Cache-Control
+            value: no-cache
     routes:
-      - type: redirect
-        source: "/(.*)"
+      - type: rewrite
+        source: "/((?!api/).*)"
         destination: "/index.html"
     envVars:
       - key: NODE_ENV
