@@ -18,10 +18,12 @@ services:
         value: https://hospital-appointment.vercel.app
   - type: web
     name: hospital-appointment-frontend
-    env: node
+    env: static
     plan: free
     buildCommand: npm install && npm run build
-    startCommand: npm run preview
+    staticPublishPath: ./dist
     envVars:
       - key: NODE_ENV
         value: production
+      - key: VITE_API_URL
+        value: https://hospital-appointment-backend-t3jg.onrender.com
