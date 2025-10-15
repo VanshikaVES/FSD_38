@@ -11,15 +11,17 @@ services:
       - key: PORT
         value: 10000
       - key: MONGODB_URI
-        fromDatabase:
-          name: hospital-appointment-db
-          property: connectionString
+        value: mongodb+srv://d2024vanshikaahuja_db_user:Vanshika@cluster0.jdbxboe.mongodb.net/hospital_appointment?retryWrites=true&w=majority
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ORIGIN
-        value: https://hospital-appointment-ruby.vercel.app
-
-databases:
-  - name: hospital-appointment-db
+        value: https://hospital-appointment.vercel.app
+  - type: web
+    name: hospital-appointment-frontend
+    env: node
     plan: free
-    databaseName: hospital_appointment
+    buildCommand: npm install && npm run build
+    startCommand: npm run preview
+    envVars:
+      - key: NODE_ENV
+        value: production
