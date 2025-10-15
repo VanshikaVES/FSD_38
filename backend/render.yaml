@@ -3,7 +3,6 @@ services:
     name: hospital-appointment-backend
     env: node
     plan: free
-    rootDir: backend
     buildCommand: npm install
     startCommand: npm start
     envVars:
@@ -18,7 +17,7 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ORIGIN
-        value: https://your-frontend-domain.vercel.app
+        value: https://hospital-appointment-ruby.vercel.app
 
 databases:
   - name: hospital-appointment-db

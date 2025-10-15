@@ -5,9 +5,6 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
   ],
-  define: {
-    'process.env': process.env
-  },
   build: {
     outDir: 'dist',
     sourcemap: false,
