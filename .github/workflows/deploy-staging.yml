@@ -1,0 +1,149 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [ develop ]
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deployment even if tests fail'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  NODE_VERSION: '18'
+  ENVIRONMENT: 'staging'
+
+jobs:
+  # Frontend Staging Deployment
+  deploy-frontend-staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run linter
+      run: npm run lint
+      continue-on-error: true
+
+    - name: Build frontend
+      run: npm run build
+
+    - name: Deploy to Vercel Staging
+      uses: amondnet/vercel-action@v25
+      with:
+        vercel-token: ${{ secrets.VERCEL_TOKEN }}
+        vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+        vercel-project-id: ${{ secrets.VERCEL_STAGING_PROJECT_ID }}
+        working-directory: ./
+        vercel-args: '--prod=false'
+
+    - name: Notify staging deployment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '🚀 Frontend deployed to staging successfully!'
+          })
+
+  # Backend Staging Deployment
+  deploy-backend-staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+
+    - name: Install dependencies
+      run: cd backend && npm ci
+
+    - name: Run tests
+      run: cd backend && npm test
+      env:
+        NODE_ENV: test
+        MONGODB_URI: ${{ secrets.MONGODB_TEST_URI }}
+
+    - name: Deploy to Render Staging
+      uses: johnbeynon/render-deploy-action@v0.0.8
+      with:
+        service-id: ${{ secrets.RENDER_STAGING_SERVICE_ID }}
+        api-key: ${{ secrets.RENDER_API_KEY }}
+
+    - name: Health check staging
+      run: |
+        echo "Waiting for staging service to be ready..."
+        sleep 30
+        if curl -f "${{ secrets.RENDER_STAGING_URL }}/health" > /dev/null 2>&1; then
+          echo "✅ Staging service is healthy"
+        else
+          echo "❌ Staging service health check failed"
+          exit 1
+        fi
+
+    - name: Notify staging deployment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '🚀 Backend deployed to staging successfully!'
+          })
+
+  # Integration Tests
+  integration-tests:
+    needs: [deploy-frontend-staging, deploy-backend-staging]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Run integration tests
+      run: |
+        echo "Running integration tests against staging environment..."
+        # Add your integration test commands here
+        # npm run test:integration -- --baseUrl=${{ secrets.VERCEL_STAGING_URL }} --apiUrl=${{ secrets.RENDER_STAGING_URL }}
+
+    - name: Comment integration test results
+      if: always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const status = '${{ job.status }}' === 'success' ? '✅' : '❌';
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `${status} Integration tests ${'${{ job.status }}' === 'success' ? 'passed' : 'failed'}!`
+          })

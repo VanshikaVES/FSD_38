@@ -1,7 +1,5 @@
 const request = require('supertest');
-const app = require('../server');
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+const { app } = require('../server');
 const User = require('../models/User');
 const Doctor = require('../models/Doctor');
 const Appointment = require('../models/Appointment');
@@ -58,7 +56,7 @@ describe('Appointments API', () => {
       .send({
         fullName: 'Test User',
         doctor: doctorId,
-        date: '2025-01-01',
+        date: new Date().toISOString().split('T')[0], // Current date
         time: '10:00',
         reason: 'Test appointment',
       });

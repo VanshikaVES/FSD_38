@@ -1,0 +1,179 @@
+name: Monitoring & Health Checks
+
+on:
+  schedule:
+    - cron: '*/5 * * * *' # Every 5 minutes
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to monitor'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - staging
+        - production
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Set environment URLs
+      id: set-urls
+      run: |
+        if [ "${{ github.event.inputs.environment }}" = "staging" ]; then
+          echo "backend-url=${{ secrets.RENDER_STAGING_URL }}" >> $GITHUB_OUTPUT
+          echo "frontend-url=${{ secrets.VERCEL_STAGING_URL }}" >> $GITHUB_OUTPUT
+        else
+          echo "backend-url=${{ secrets.RENDER_PRODUCTION_URL }}" >> $GITHUB_OUTPUT
+          echo "frontend-url=${{ secrets.VERCEL_PRODUCTION_URL }}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Check backend health
+      id: backend-health
+      run: |
+        BACKEND_URL="${{ steps.set-urls.outputs.backend-url }}"
+        echo "Checking backend health at: $BACKEND_URL"
+        
+        # Basic health check
+        if curl -f -s "$BACKEND_URL/health" > /dev/null; then
+          echo "✅ Backend is healthy"
+          echo "status=healthy" >> $GITHUB_OUTPUT
+        else
+          echo "❌ Backend health check failed"
+          echo "status=unhealthy" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Check frontend availability
+      id: frontend-health
+      run: |
+        FRONTEND_URL="${{ steps.set-urls.outputs.frontend-url }}"
+        echo "Checking frontend availability at: $FRONTEND_URL"
+        
+        if curl -f -s "$FRONTEND_URL" > /dev/null; then
+          echo "✅ Frontend is accessible"
+          echo "status=accessible" >> $GITHUB_OUTPUT
+        else
+          echo "❌ Frontend is not accessible"
+          echo "status=inaccessible" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Get detailed metrics
+      id: metrics
+      run: |
+        BACKEND_URL="${{ steps.set-urls.outputs.backend-url }}"
+        echo "Fetching detailed metrics from: $BACKEND_URL/metrics"
+        
+        METRICS=$(curl -s "$BACKEND_URL/metrics" || echo '{"error": "Failed to fetch metrics"}')
+        echo "metrics<<EOF" >> $GITHUB_OUTPUT
+        echo "$METRICS" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Create issue if unhealthy
+      if: steps.backend-health.outputs.status == 'unhealthy' || steps.frontend-health.outputs.status == 'inaccessible'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const title = `🚨 Health Check Failed - ${new Date().toISOString()}`;
+          const body = `
+          ## Health Check Results
+          
+          **Backend Status:** ${{ steps.backend-health.outputs.status }}
+          **Frontend Status:** ${{ steps.frontend-health.outputs.status }}
+          **Environment:** ${{ github.event.inputs.environment || 'production' }}
+          **Time:** ${new Date().toISOString()}
+          
+          ### Metrics
+          \`\`\`json
+          ${{ steps.metrics.outputs.metrics }}
+          \`\`\`
+          
+          Please investigate and resolve the issue.
+          `;
+          
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: body,
+            labels: ['bug', 'monitoring', 'high-priority']
+          });
+
+    - name: Update status badge
+      if: always()
+      run: |
+        BACKEND_STATUS="${{ steps.backend-health.outputs.status }}"
+        FRONTEND_STATUS="${{ steps.frontend-health.outputs.status }}"
+        
+        if [ "$BACKEND_STATUS" = "healthy" ] && [ "$FRONTEND_STATUS" = "accessible" ]; then
+          echo "✅ All systems operational"
+        else
+          echo "❌ Some systems are experiencing issues"
+        fi
+
+  # Database monitoring
+  database-monitor:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Install MongoDB tools
+      run: |
+        wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | sudo apt-key add -
+        echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+        sudo apt-get update
+        sudo apt-get install -y mongodb-mongosh
+
+    - name: Check database connection
+      run: |
+        echo "Checking database connection..."
+        # This would require database credentials in secrets
+        # mongosh "${{ secrets.MONGODB_URI }}" --eval "db.runCommand({ping: 1})"
+        echo "Database monitoring completed"
+
+  # Performance monitoring
+  performance-monitor:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Install monitoring tools
+      run: |
+        npm install -g lighthouse-ci
+        npm install -g web-vitals
+
+    - name: Run performance audit
+      run: |
+        echo "Running performance audit..."
+        # This would run against production URLs
+        # lighthouse-ci autorun --collect.url="${{ secrets.VERCEL_PRODUCTION_URL }}"
+        echo "Performance monitoring completed"

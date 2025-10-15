@@ -36,6 +36,72 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/hospital-ap
 .then(() => console.log('MongoDB connected'))
 .catch(err => console.error('MongoDB connection error:', err));
 
+// Health check endpoints
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+app.get('/health/detailed', async (req, res) => {
+  try {
+    const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+    const memoryUsage = process.memoryUsage();
+    
+    res.status(200).json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || 'development',
+      database: {
+        status: dbStatus,
+        readyState: mongoose.connection.readyState
+      },
+      memory: {
+        rss: `${Math.round(memoryUsage.rss / 1024 / 1024)} MB`,
+        heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)} MB`,
+        heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB`,
+        external: `${Math.round(memoryUsage.external / 1024 / 1024)} MB`
+      },
+      version: process.version,
+      platform: process.platform
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
+  }
+});
+
+// Metrics endpoint for monitoring
+app.get('/metrics', (req, res) => {
+  const memoryUsage = process.memoryUsage();
+  const cpuUsage = process.cpuUsage();
+  
+  res.status(200).json({
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: {
+      rss: memoryUsage.rss,
+      heapTotal: memoryUsage.heapTotal,
+      heapUsed: memoryUsage.heapUsed,
+      external: memoryUsage.external
+    },
+    cpu: {
+      user: cpuUsage.user,
+      system: cpuUsage.system
+    },
+    connections: {
+      active: io.engine.clientsCount
+    }
+  });
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/doctors', doctorRoutes);
