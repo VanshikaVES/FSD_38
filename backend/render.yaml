@@ -11,9 +11,7 @@ services:
       - key: PORT
         value: 10000
       - key: MONGODB_URI
-        fromDatabase:
-          name: hospital-appointment-db
-          property: connectionString
+        value: mongodb+srv://d2024vanshikaahuja_db_user:Vanshika@cluster0.jdbxboe.mongodb.net/hospital_appointment?retryWrites=true&w=majority
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ORIGIN
